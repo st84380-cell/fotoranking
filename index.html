@@ -613,7 +613,12 @@ async function startGame() {
   numPhotos = pool.length;
 
   correctOrder = pool.map((p, i) => ({ ...p, _ci: i }));
-  currentOrder = shuffle([...correctOrder]);
+  // keep shuffling until order differs from correct order
+  let attempt = 0;
+  do {
+    currentOrder = shuffle([...correctOrder]);
+    attempt++;
+  } while (attempt < 20 && correctOrder.length > 1 && currentOrder.every((p, i) => p === correctOrder[i]));
   secsLeft     = cfg.seconds;
 
   document.getElementById('g-header-title').textContent = cfg.title;
@@ -661,8 +666,7 @@ function makeCard(p, i, isResult) {
     seq.textContent = i + 1;
     imgWrap.appendChild(seq);
   } else {
-    const ci = correctOrder.indexOf(p);
-    const ok = ci === i;
+    const ok = p._ci === i;
     card.classList.add(ok ? 'ok' : 'fail');
     const rb = document.createElement('span');
     rb.className = 'res-badge';
@@ -675,7 +679,7 @@ function makeCard(p, i, isResult) {
   const cap = document.createElement('div');
   cap.className = 'pcap';
   cap.textContent = isResult
-    ? (p.caption || ('照片 ' + (correctOrder.indexOf(p) + 1)))
+    ? (p.caption || ('照片 ' + (p._ci + 1)))
     : ('📷 ' + (i + 1));
   card.appendChild(cap);
 
