@@ -307,7 +307,7 @@ input[type="file"] { display: none; }
       <input type="text" id="pname" placeholder="請輸入名字" maxlength="12" autocomplete="off" />
     </div>
     <button class="btn btn-primary" onclick="startGame()">開始遊戲 🎉</button>
-    <button class="btn btn-gray" onclick="showScreen('s-admin')" style="margin-top:10px;">⚙️ 管理員設定</button>
+    <button class="btn btn-gray" onclick="enterAdmin()" style="margin-top:10px;">⚙️ 管理員設定</button>
 
     <div id="lb-preview-wrap" style="display:none; margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem;">
       <div class="sec-lbl">🏆 目前排行</div>
@@ -581,6 +581,15 @@ function compressImage(file, maxPx, quality) {
 /* ═══════════════════════════════════════
    SCREEN CONTROL
 ════════════════════════════════════════ */
+function enterAdmin() {
+  const pw = prompt('請輸入管理員密碼：');
+  if (pw === '0522') {
+    showScreen('s-admin');
+  } else if (pw !== null) {
+    alert('密碼錯誤！');
+  }
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
