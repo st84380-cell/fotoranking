@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>生日照片排序遊戲 🎂</title>
+<meta name="description" content="把照片按時間順序排好，看誰最了解小壽星！" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;900&display=swap');
+
+:root {
+  --purple: #7F77DD;
+  --purple-light: #EEEDFE;
+  --purple-dark: #3C3489;
+  --green: #1D9E75;
+  --green-light: #E1F5EE;
+  --red: #E24B4A;
+  --red-light: #FCEBEB;
+  --amber-light: #FAEEDA;
+  --gray-light: #F4F2EC;
+  --bg: #FFF8F3;
+  --surface: #FFFFFF;
+  --text: #1a1a1a;
+  --muted: #6b6b6b;
+  --border: rgba(0,0,0,0.1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+}
+
+/* ── screens ── */
+.screen { display: none; min-height: 100dvh; flex-direction: column; }
+.screen.active { display: flex; }
+
+/* ── top band ── */
+.band {
+  background: linear-gradient(135deg, #7F77DD 0%, #B09FEE 100%);
+  padding: 2rem 1.25rem 3rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.band h1 { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: -0.5px; }
+.band p  { font-size: 13px; color: rgba(255,255,255,0.85); margin-top: 5px; }
+
+/* ── card ── */
+.card {
+  flex: 1;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  margin-top: -16px;
+  padding: 1.5rem 1.25rem 2.5rem;
+}
+
+/* ── form ── */
+.flabel { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 6px; }
+.fgroup { margin-bottom: 1.1rem; }
+input[type="text"], textarea {
+  font-family: 'Nunito', sans-serif;
+  font-size: 15px;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input[type="text"]:focus, textarea:focus { border-color: var(--purple); }
+textarea { resize: none; min-height: 60px; font-size: 14px; }
+
+/* ── buttons ── */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 20px; border-radius: 50px;
+  font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700;
+  border: none; cursor: pointer; width: 100%;
+  transition: transform 0.1s, opacity 0.1s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary  { background: var(--purple); color: #fff; }
+.btn-primary:hover { opacity: 0.88; }
+.btn-gray     { background: var(--gray-light); color: var(--text); }
+.btn-danger   { background: var(--red-light); color: var(--red); }
+.btn-sm       { padding: 9px 16px; font-size: 13px; border-radius: 50px; font-family:'Nunito',sans-serif; font-weight:700; cursor:pointer; border:none; }
+.btn-row      { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 1rem; }
+
+/* ── game bar ── */
+.gbar {
+  background: var(--purple);
+  padding: 10px 1rem;
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+.gbar-title { flex: 1; font-size: 14px; font-weight: 700; color: #EEEDFE; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timer-chip {
+  background: rgba(255,255,255,0.2); color: #fff;
+  border-radius: 20px; padding: 4px 12px;
+  font-size: 15px; font-weight: 900; min-width: 50px; text-align: center;
+}
+.timer-chip.hot { background: var(--red); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+
+.prog-track { height: 4px; background: rgba(255,255,255,0.25); flex-shrink:0; }
+.prog-fill  { height: 100%; background: #fff; transition: width 1s linear; }
+
+.hint {
+  padding: 8px 1rem; font-size: 12px; color: var(--muted);
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  text-align: center; flex-shrink:0;
+}
+
+/* ── photo grid ── */
+.pgrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 1rem;
+  flex: 1;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.pcard {
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  cursor: grab;
+  transition: transform 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.pcard:active { cursor: grabbing; }
+.pcard.dragging  { opacity: 0.35; transform: scale(0.95); border-color: var(--purple); border-style: dashed; }
+.pcard.dragover  { border-color: var(--purple); transform: scale(1.04); box-shadow: 0 0 0 3px var(--purple-light); }
+.pcard.ok        { border-color: var(--green); background: var(--green-light); }
+.pcard.fail      { border-color: var(--red);   background: var(--red-light); }
+
+.pimg {
+  width: 100%; aspect-ratio: 4/3;
+  background: var(--gray-light);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 52px; position: relative; overflow: hidden;
+}
+.pimg img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; display: block; }
+
+.seq-badge {
+  position: absolute; top: 5px; left: 5px;
+  background: rgba(0,0,0,0.5); color: #fff;
+  font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px;
+}
+.res-badge {
+  position: absolute; top: 5px; right: 5px; font-size: 18px;
+}
+
+.pcap {
+  padding: 6px 8px; font-size: 12px; color: var(--muted);
+  text-align: center; line-height: 1.3; word-break: break-word;
+}
+
+/* ── game footer ── */
+.gfoot {
+  padding: 0.75rem 1rem 1.25rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ── result ── */
+.result-head { padding: 1.75rem 1rem 1rem; text-align: center; }
+.score-ring {
+  width: 100px; height: 100px; border-radius: 50%;
+  background: var(--purple-light); border: 3px solid var(--purple);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+}
+.score-ring .sn { font-size: 28px; font-weight: 900; color: var(--purple-dark); line-height: 1; }
+.score-ring .ss { font-size: 11px; color: var(--purple); font-weight: 700; }
+.score-ring.perf { background: var(--green-light); border-color: var(--green); }
+.score-ring.perf .sn { color: #085041; }
+.score-ring.perf .ss { color: var(--green); }
+.score-ring.low  { background: var(--red-light);   border-color: var(--red); }
+.score-ring.low  .sn { color: #501313; }
+.score-ring.low  .ss { color: var(--red); }
+.result-head h2  { font-size: 19px; font-weight: 900; margin-bottom: 4px; }
+.result-head p   { font-size: 13px; color: var(--muted); }
+
+.result-body { padding: 0 1rem 2.5rem; }
+.sec-lbl { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin: 1rem 0 8px; }
+
+/* ── leaderboard ── */
+.lb-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.lb-row:last-child { border-bottom: none; }
+.lb-rank  { font-size: 17px; min-width: 26px; text-align: center; }
+.lb-name  { flex: 1; font-weight: 700; }
+.lb-name.me { color: var(--purple); }
+.lb-score { font-weight: 900; }
+.lb-time  { font-size: 12px; color: var(--muted); }
+.lb-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 10px 0; }
+
+/* ── admin ── */
+#s-admin { background: var(--bg); overflow-y: auto; }
+.admin-bar { background: var(--purple-dark); padding: 12px 1rem; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.admin-bar h2 { font-size: 17px; font-weight: 900; color: #fff; }
+.admin-bar button { background: none; border: none; cursor: pointer; color: #fff; font-size: 20px; line-height: 1; }
+
+.admin-body { padding: 1.25rem; }
+
+/* time selector */
+.tsel { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+.topt {
+  border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 8px 4px; text-align: center; cursor: pointer;
+  font-size: 12px; font-weight: 700; color: var(--muted); background: var(--bg);
+  transition: all 0.15s;
+}
+.topt .big { display: block; font-size: 18px; font-weight: 900; color: var(--text); }
+.topt.sel { border-color: var(--purple); background: var(--purple-light); color: var(--purple-dark); }
+.topt.sel .big { color: var(--purple-dark); }
+
+/* photo upload rows */
+.photo-row {
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--surface);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.photo-row-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--purple-light); color: var(--purple-dark);
+  font-size: 12px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 10px;
+}
+.photo-row-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.photo-preview {
+  width: 56px; height: 56px; border-radius: 8px;
+  object-fit: cover; border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.photo-preview.hidden { display: none; }
+
+.upload-label {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; border-radius: 8px;
+  background: var(--purple-light); color: var(--purple-dark);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  border: 1.5px dashed var(--purple);
+  transition: opacity 0.15s;
+}
+.upload-label:hover { opacity: 0.8; }
+.upload-label.has-file { background: var(--green-light); border-color: var(--green); color: #085041; }
+input[type="file"] { display: none; }
+
+.add-remove-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+
+.info-box {
+  background: var(--amber-light); border: 1px solid #EF9F27;
+  border-radius: 10px; padding: 10px 12px;
+  font-size: 12px; color: #5a3500; line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.status-bar {
+  background: var(--gray-light); border-radius: 10px;
+  padding: 10px 14px; font-size: 13px; color: var(--muted);
+  margin: 10px 0; display: none; text-align: center;
+}
+.status-bar.show { display: block; }
+.status-bar.ok   { background: var(--green-light); color: #085041; }
+.status-bar.err  { background: var(--red-light);   color: #501313; }
+
+.qr-wrap { text-align: center; margin-top: 1rem; display: none; }
+.qr-wrap canvas { border: 4px solid #fff; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+.gen-url {
+  background: var(--purple-light); border: 1px solid var(--purple);
+  border-radius: 10px; padding: 10px 12px; font-size: 11px; color: var(--purple-dark);
+  word-break: break-all; margin-top: 10px; display: none; line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════
+     NAME SCREEN
+══════════════════════════════════════ -->
+<div class="screen active" id="s-name">
+  <div class="band">
+    <h1 id="g-title">🎂 誰認識我最久？</h1>
+    <p id="g-sub">把照片排成正確的時間順序！</p>
+  </div>
+  <div class="card">
+    <div class="fgroup">
+      <label class="flabel" for="pname">你的名字</label>
+      <input type="text" id="pname" placeholder="請輸入名字" maxlength="12" autocomplete="off" />
+    </div>
+    <button class="btn btn-primary" onclick="startGame()">開始遊戲 🎉</button>
+    <button class="btn btn-gray" onclick="showScreen('s-admin')" style="margin-top:10px;">⚙️ 管理員設定</button>
+
+    <div id="lb-preview-wrap" style="display:none; margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem;">
+      <div class="sec-lbl">🏆 目前排行</div>
+      <div id="lb-preview"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     GAME SCREEN
+══════════════════════════════════════ -->
+<div class="screen" id="s-game">
+  <div class="gbar">
+    <span class="gbar-title" id="g-header-title">🎂 生日照片排序</span>
+    <span class="timer-chip" id="timer">60</span>
+  </div>
+  <div class="prog-track"><div class="prog-fill" id="prog" style="width:100%"></div></div>
+  <div class="hint">拖曳照片，由左到右按時間排列（最早 → 最近）</div>
+  <div class="pgrid" id="pgrid"></div>
+  <div class="gfoot">
+    <button class="btn btn-primary" onclick="submitAnswer()">送出答案 ✓</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     RESULT SCREEN
+══════════════════════════════════════ -->
+<div class="screen" id="s-result">
+  <div class="result-head">
+    <div class="score-ring" id="sc-ring">
+      <div class="sn" id="sc-num">0</div>
+      <div class="ss" id="sc-sub">分</div>
+    </div>
+    <h2 id="res-msg"></h2>
+    <p id="res-detail"></p>
+  </div>
+  <div class="result-body">
+    <div class="sec-lbl">你的排列結果</div>
+    <div class="pgrid" id="rgrid" style="padding:0; margin-bottom:1rem;"></div>
+    <div class="sec-lbl">🏆 排行榜</div>
+    <div id="lb-main"></div>
+    <div class="btn-row">
+      <button class="btn btn-gray" onclick="backToName()">換人玩 ↩</button>
+      <button class="btn btn-primary" onclick="startGame()">再挑戰 🔄</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     ADMIN SCREEN
+══════════════════════════════════════ -->
+<div class="screen" id="s-admin">
+  <div class="admin-bar">
+    <button onclick="showScreen('s-name')">←</button>
+    <h2>⚙️ 遊戲設定</h2>
+  </div>
+  <div class="admin-body">
+
+    <div class="fgroup">
+      <label class="flabel">遊戲標題</label>
+      <input type="text" id="a-title" placeholder="例：典的三歲生日 🎂" />
+    </div>
+    <div class="fgroup">
+      <label class="flabel">副標題</label>
+      <input type="text" id="a-sub" placeholder="例：把照片排成正確的時間順序！" />
+    </div>
+    <div class="fgroup">
+      <label class="flabel">倒數秒數</label>
+      <div class="tsel" id="tsel">
+        <div class="topt" data-t="45"><span class="big">45</span>秒</div>
+        <div class="topt sel" data-t="60"><span class="big">60</span>秒</div>
+        <div class="topt" data-t="90"><span class="big">90</span>秒</div>
+        <div class="topt" data-t="120"><span class="big">120</span>秒</div>
+      </div>
+    </div>
+
+    <div class="fgroup">
+      <label class="flabel">上傳照片（依正確時間順序）</label>
+      <div class="info-box">
+        📸 每張照片上傳後可加文字說明（如「1歲生日」、「第一次走路」）<br>
+        照片會自動壓縮後上傳至雲端，玩家掃 QR code 即可載入。
+      </div>
+      <div id="photo-rows"></div>
+      <div class="add-remove-row">
+        <button class="btn-sm btn-gray" onclick="addRow()" style="background:var(--purple-light);color:var(--purple-dark);">＋ 新增一張</button>
+        <button class="btn-sm btn-danger" onclick="removeRow()" style="background:var(--red-light);color:var(--red);">－ 刪除最後</button>
+      </div>
+    </div>
+
+    <div class="status-bar" id="upload-status"></div>
+
+    <button class="btn btn-primary" onclick="saveAndGenerate()" style="margin-top:0.5rem;">
+      ☁️ 儲存設定 & 產生 QR code
+    </button>
+    <button class="btn btn-danger" onclick="clearLB()" style="margin-top:10px;">
+      🗑️ 重置排行榜
+    </button>
+
+    <div class="gen-url" id="gen-url"></div>
+    <div class="qr-wrap" id="qr-wrap"><canvas id="qr-canvas"></canvas></div>
+    <div id="copy-wrap" style="display:none; margin-top:10px;">
+      <button class="btn btn-gray" onclick="copyUrl()">📋 複製遊戲連結</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* ═══════════════════════════════════════
+   SUPABASE CONFIG
+════════════════════════════════════════ */
+const SB_URL = 'https://ltnsjgdhooscizzhbrkz.supabase.co';
+const SB_KEY = 'sb_publishable_Z0PXsobA3QYz65YOAr7m7Q_jHvlTFpT';
+const BUCKET  = 'bday-photos';
+const GAME_ID = 'default';
+
+const headers = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+
+/* ═══════════════════════════════════════
+   STATE
+════════════════════════════════════════ */
+let cfg = { title: '🎂 誰認識我最久？', subtitle: '把照片排成正確的時間順序！', seconds: 60, photos: [] };
+let correctOrder = [], currentOrder = [], playerName = '', numPhotos = 0;
+let timerInt = null, secsLeft = 60, t0 = null, lb = [], dragIdx = null;
+let realtimeSub = null;
+
+const MEDALS = ['🥇','🥈','🥉'];
+const DEMOS = [
+  {emoji:'🍼',caption:'0 個月'},{emoji:'😴',caption:'2 個月'},{emoji:'😄',caption:'4 個月'},
+  {emoji:'🙃',caption:'6 個月'},{emoji:'🪑',caption:'8 個月'},{emoji:'🐣',caption:'10 個月'},
+  {emoji:'🚶',caption:'1 歲'},{emoji:'🎨',caption:'1.5 歲'},{emoji:'🗣️',caption:'2 歲'},{emoji:'🎂',caption:'3 歲'}
+];
+
+/* ═══════════════════════════════════════
+   INIT
+════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', async () => {
+  // time selector
+  document.querySelectorAll('#tsel .topt').forEach(el =>
+    el.addEventListener('click', () => {
+      document.querySelectorAll('#tsel .topt').forEach(e => e.classList.remove('sel'));
+      el.classList.add('sel');
+    })
+  );
+  // load from Supabase
+  await loadConfig();
+  updateNameScreen();
+  initAdmin();
+  subscribeLeaderboard();
+});
+
+/* ═══════════════════════════════════════
+   SUPABASE HELPERS
+════════════════════════════════════════ */
+async function sbGet(path) {
+  const r = await fetch(SB_URL + path, { headers });
+  return r.json();
+}
+async function sbPost(path, body) {
+  const r = await fetch(SB_URL + path, { method: 'POST', headers: { ...headers, 'Prefer': 'return=representation' }, body: JSON.stringify(body) });
+  return r.json();
+}
+async function sbPatch(path, body) {
+  const r = await fetch(SB_URL + path, { method: 'PATCH', headers: { ...headers, 'Prefer': 'return=representation' }, body: JSON.stringify(body) });
+  return r.json();
+}
+
+/* ── Load config from Supabase ── */
+async function loadConfig() {
+  try {
+    const data = await sbGet('/rest/v1/bday_game_config?id=eq.default&select=*');
+    if (data && data[0]) {
+      const row = data[0];
+      cfg.title    = row.title    || cfg.title;
+      cfg.subtitle = row.subtitle || cfg.subtitle;
+      cfg.seconds  = row.seconds  || cfg.seconds;
+      cfg.photos   = row.photos   || [];
+    }
+    // load leaderboard
+    const lbData = await sbGet('/rest/v1/bday_leaderboard?game_id=eq.default&order=score.desc,elapsed.asc&limit=10&select=*');
+    if (Array.isArray(lbData)) lb = lbData.map(r => ({ name: r.player, score: r.score, total: r.total, elapsed: r.elapsed }));
+  } catch(e) { console.warn('Supabase load failed, using demo mode', e); }
+}
+
+/* ── Upload one photo file, return public URL ── */
+async function uploadPhoto(file, idx) {
+  const compressed = await compressImage(file, 800, 0.75);
+  const ext = 'jpg';
+  const path = `game_default/${Date.now()}_${idx}.${ext}`;
+  const r = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+    body: compressed
+  });
+  if (!r.ok) throw new Error('Upload failed: ' + r.status);
+  return `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+}
+
+/* ── Save config to Supabase ── */
+async function saveConfig(photos) {
+  const tSel = document.querySelector('#tsel .topt.sel');
+  const secs = tSel ? parseInt(tSel.dataset.t) : 60;
+  const title = document.getElementById('a-title').value.trim() || '🎂 誰認識我最久？';
+  const sub   = document.getElementById('a-sub').value.trim()   || '把照片排成正確的時間順序！';
+
+  cfg = { title, subtitle: sub, seconds: secs, photos };
+
+  await sbPatch('/rest/v1/bday_game_config?id=eq.default', {
+    title, subtitle: sub, seconds: secs, photos, updated_at: new Date().toISOString()
+  });
+}
+
+/* ── Submit score ── */
+async function saveScore(name, score, total, elapsed, timedOut) {
+  await sbPost('/rest/v1/bday_leaderboard', {
+    game_id: GAME_ID, player: name, score, total, elapsed, timed_out: timedOut
+  });
+}
+
+/* ── Realtime leaderboard ── */
+function subscribeLeaderboard() {
+  try {
+    const ws = new WebSocket(`${SB_URL.replace('https','wss')}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ topic: 'realtime:public:bday_leaderboard', event: 'phx_join', payload: {}, ref: '1' }));
+    };
+    ws.onmessage = async (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'INSERT' || msg.event === 'postgres_changes') {
+        await refreshLeaderboard();
+      }
+    };
+  } catch(e) { /* realtime optional */ }
+}
+
+async function refreshLeaderboard() {
+  try {
+    const data = await sbGet('/rest/v1/bday_leaderboard?game_id=eq.default&order=score.desc,elapsed.asc&limit=10&select=*');
+    if (Array.isArray(data)) {
+      lb = data.map(r => ({ name: r.player, score: r.score, total: r.total, elapsed: r.elapsed }));
+      renderLB('lb-main', playerName);
+      renderLBPreview();
+    }
+  } catch(e) {}
+}
+
+/* ═══════════════════════════════════════
+   IMAGE COMPRESSION
+════════════════════════════════════════ */
+function compressImage(file, maxPx, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else        { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('compress fail')), 'image/jpeg', quality);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+/* ═══════════════════════════════════════
+   SCREEN CONTROL
+════════════════════════════════════════ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function updateNameScreen() {
+  document.getElementById('g-title').textContent  = cfg.title;
+  document.getElementById('g-sub').textContent    = cfg.subtitle;
+  renderLBPreview();
+}
+
+function backToName() {
+  clearInterval(timerInt);
+  refreshLeaderboard().then(() => updateNameScreen());
+  showScreen('s-name');
+}
+
+/* ═══════════════════════════════════════
+   GAME LOGIC
+════════════════════════════════════════ */
+async function startGame() {
+  playerName = document.getElementById('pname').value.trim();
+  if (!playerName) { document.getElementById('pname').focus(); return; }
+
+  // reload latest config from Supabase before starting
+  await loadConfig();
+
+  const pool = cfg.photos.length > 0 ? cfg.photos : DEMOS;
+  numPhotos = pool.length;
+
+  correctOrder = pool.map((p, i) => ({ ...p, _ci: i }));
+  currentOrder = shuffle([...correctOrder]);
+  secsLeft     = cfg.seconds;
+
+  document.getElementById('g-header-title').textContent = cfg.title;
+  showScreen('s-game');
+  renderGrid();
+  startTimer();
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ── Grid rendering ── */
+function renderGrid() {
+  const g = document.getElementById('pgrid');
+  g.innerHTML = '';
+  currentOrder.forEach((p, i) => g.appendChild(makeCard(p, i, false)));
+}
+
+function makeCard(p, i, isResult) {
+  const card = document.createElement('div');
+  card.className = 'pcard';
+  card.dataset.idx = i;
+
+  // image area
+  const imgWrap = document.createElement('div');
+  imgWrap.className = 'pimg';
+
+  if (p.url) {
+    const img = document.createElement('img');
+    img.src = p.url; img.alt = p.caption || '';
+    img.onerror = () => { img.remove(); imgWrap.textContent = '🖼️'; };
+    imgWrap.appendChild(img);
+  } else {
+    imgWrap.textContent = p.emoji || '🖼️';
+  }
+
+  if (!isResult) {
+    const seq = document.createElement('div');
+    seq.className = 'seq-badge';
+    seq.textContent = i + 1;
+    imgWrap.appendChild(seq);
+  } else {
+    const ci = correctOrder.indexOf(p);
+    const ok = ci === i;
+    card.classList.add(ok ? 'ok' : 'fail');
+    const rb = document.createElement('span');
+    rb.className = 'res-badge';
+    rb.textContent = ok ? '✅' : '❌';
+    imgWrap.appendChild(rb);
+  }
+
+  card.appendChild(imgWrap);
+
+  const cap = document.createElement('div');
+  cap.className = 'pcap';
+  cap.textContent = isResult
+    ? (p.caption || ('照片 ' + (correctOrder.indexOf(p) + 1)))
+    : ('📷 ' + (i + 1));
+  card.appendChild(cap);
+
+  if (!isResult) attachDragHandlers(card, i);
+  return card;
+}
+
+/* ── Drag (desktop) ── */
+function attachDragHandlers(card, i) {
+  card.draggable = true;
+  card.addEventListener('dragstart', e => { dragIdx = i; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+  card.addEventListener('dragover',  e => { e.preventDefault(); card.classList.add('dragover'); });
+  card.addEventListener('dragleave', ()  => card.classList.remove('dragover'));
+  card.addEventListener('dragend',   ()  => { card.classList.remove('dragging'); dragIdx = null; });
+  card.addEventListener('drop', e => {
+    e.preventDefault(); card.classList.remove('dragover');
+    if (dragIdx === null || dragIdx === i) return;
+    const a = [...currentOrder]; const [m] = a.splice(dragIdx, 1); a.splice(i, 0, m);
+    currentOrder = a; renderGrid();
+  });
+  // Touch
+  card.addEventListener('touchstart', e => {
+    const t = e.touches[0], r = card.getBoundingClientRect();
+    dragIdx = i;
+    const cl = card.cloneNode(true);
+    cl._ox = t.clientX - r.left; cl._oy = t.clientY - r.top;
+    cl.style.cssText = `position:fixed;z-index:9999;opacity:.85;pointer-events:none;width:${r.width}px;height:${r.height}px;left:${t.clientX - cl._ox}px;top:${t.clientY - cl._oy}px;transform:scale(1.05);border-radius:12px;`;
+    document.body.appendChild(cl); card._cl = cl; card.style.opacity = '.3';
+  }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const t = e.touches[0];
+    if (card._cl) { card._cl.style.left = (t.clientX - card._cl._ox) + 'px'; card._cl.style.top = (t.clientY - card._cl._oy) + 'px'; }
+    document.querySelectorAll('.pcard').forEach(c => c.classList.remove('dragover'));
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const tc = el && el.closest('.pcard');
+    if (tc && parseInt(tc.dataset.idx) !== i) tc.classList.add('dragover');
+  }, { passive: false });
+  card.addEventListener('touchend', e => {
+    if (card._cl) { card._cl.remove(); card._cl = null; }
+    document.querySelectorAll('.pcard').forEach(c => { c.classList.remove('dragover'); c.style.opacity = ''; });
+    const t = e.changedTouches[0];
+    const tc = document.elementFromPoint(t.clientX, t.clientY)?.closest('.pcard');
+    if (tc) {
+      const ti = parseInt(tc.dataset.idx);
+      if (dragIdx !== null && dragIdx !== ti) {
+        const a = [...currentOrder]; const [m] = a.splice(dragIdx, 1); a.splice(ti, 0, m);
+        currentOrder = a; renderGrid();
+      }
+    }
+    dragIdx = null;
+  });
+}
+
+/* ── Timer ── */
+function startTimer() {
+  t0 = Date.now(); updateTimer();
+  timerInt = setInterval(() => { secsLeft--; updateTimer(); if (secsLeft <= 0) { clearInterval(timerInt); submitAnswer(true); } }, 1000);
+}
+function updateTimer() {
+  const el = document.getElementById('timer'), pf = document.getElementById('prog');
+  el.textContent = secsLeft;
+  pf.style.width = (secsLeft / cfg.seconds * 100) + '%';
+  if (secsLeft <= 10) { el.classList.add('hot'); pf.style.background = 'var(--red)'; }
+  else { el.classList.remove('hot'); pf.style.background = '#fff'; }
+}
+
+/* ── Submit ── */
+async function submitAnswer(timedOut = false) {
+  clearInterval(timerInt);
+  const elapsed = Math.round((Date.now() - t0) / 1000);
+  let ok = 0;
+  currentOrder.forEach((p, i) => { if (correctOrder[i] === p) ok++; });
+  const pct = Math.round(ok / numPhotos * 100);
+
+  // save to Supabase
+  await saveScore(playerName, ok, numPhotos, elapsed, timedOut);
+
+  // score ring
+  const ring = document.getElementById('sc-ring');
+  ring.className = 'score-ring' + (pct === 100 ? ' perf' : pct < 50 ? ' low' : '');
+  document.getElementById('sc-num').textContent = ok + '/' + numPhotos;
+  document.getElementById('sc-sub').textContent = timedOut ? '時間到' : '分';
+
+  const msgs = [[100,'完美！你最了解小壽星！🌟'],[80,'超厲害！記憶力一流！🎉'],[60,'不錯！差一點點！🙌'],[40,'繼續加油！😄'],[0,'友情最重要！🫶']];
+  document.getElementById('res-msg').textContent = (timedOut ? '⏰ ' : '') + msgs.find(([t]) => pct >= t)[1];
+  document.getElementById('res-detail').textContent = `答對 ${ok} 張，用了 ${elapsed} 秒`;
+
+  // result grid
+  const rg = document.getElementById('rgrid');
+  rg.innerHTML = '';
+  currentOrder.forEach((p, i) => rg.appendChild(makeCard(p, i, true)));
+
+  await refreshLeaderboard();
+  showScreen('s-result');
+}
+
+/* ═══════════════════════════════════════
+   LEADERBOARD RENDER
+════════════════════════════════════════ */
+function renderLB(id, highlight = '') {
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+  if (!lb.length) { el.innerHTML = '<div class="lb-empty">還沒有紀錄，成為第一名！</div>'; return; }
+  lb.forEach((e, i) => {
+    const row = document.createElement('div');
+    row.className = 'lb-row';
+    row.innerHTML = `<span class="lb-rank">${MEDALS[i] || (i + 1)}</span><span class="lb-name${e.name === highlight ? ' me' : ''}">${e.name}</span><span class="lb-score">${e.score}/${e.total}</span><span class="lb-time">${e.elapsed}s</span>`;
+    el.appendChild(row);
+  });
+}
+function renderLBPreview() {
+  const w = document.getElementById('lb-preview-wrap');
+  if (!lb.length) { w.style.display = 'none'; return; }
+  w.style.display = 'block';
+  renderLB('lb-preview');
+}
+
+/* ═══════════════════════════════════════
+   ADMIN
+════════════════════════════════════════ */
+let rowCount = 0;
+
+function initAdmin() {
+  document.getElementById('a-title').value = cfg.title;
+  document.getElementById('a-sub').value   = cfg.subtitle;
+  document.querySelectorAll('#tsel .topt').forEach(el =>
+    el.classList.toggle('sel', parseInt(el.dataset.t) === cfg.seconds)
+  );
+  rowCount = 0;
+  document.getElementById('photo-rows').innerHTML = '';
+  const count = Math.max(cfg.photos.length, 3);
+  for (let i = 0; i < count; i++) addRow(cfg.photos[i]);
+}
+
+function addRow(existing) {
+  rowCount++;
+  const wrap = document.getElementById('photo-rows');
+  const row = document.createElement('div');
+  row.className = 'photo-row';
+  row.dataset.row = rowCount;
+  row.innerHTML = `
+    <div class="photo-row-num">${rowCount}</div>
+    <div class="photo-row-fields">
+      <label class="upload-label${existing && existing.url ? ' has-file' : ''}" for="file-${rowCount}">
+        ${existing && existing.url ? '✅ 已有照片' : '📷 點擊上傳照片'}
+        <input type="file" id="file-${rowCount}" accept="image/*" onchange="onFileChange(this, ${rowCount})" />
+      </label>
+      ${existing && existing.url ? `<img class="photo-preview" src="${existing.url}" alt="" />` : `<img class="photo-preview hidden" id="prev-${rowCount}" alt="" />`}
+      <input type="text" placeholder="照片說明（如：1歲生日、第一次走路）" value="${existing ? (existing.caption || '') : ''}" data-caption="true" />
+    </div>
+  `;
+  wrap.appendChild(row);
+}
+
+function onFileChange(input, rowNum) {
+  if (!input.files[0]) return;
+  const label = input.closest('.upload-label');
+  const row   = input.closest('.photo-row');
+  label.classList.add('has-file');
+  label.childNodes[0].textContent = '✅ ' + input.files[0].name.slice(0, 20);
+
+  // show preview
+  let prev = row.querySelector('.photo-preview');
+  if (!prev) { prev = document.createElement('img'); prev.className = 'photo-preview'; label.after(prev); }
+  prev.classList.remove('hidden');
+  prev.src = URL.createObjectURL(input.files[0]);
+}
+
+function removeRow() {
+  const wrap = document.getElementById('photo-rows');
+  if (rowCount <= 1) return;
+  wrap.removeChild(wrap.lastElementChild);
+  rowCount--;
+}
+
+async function saveAndGenerate() {
+  const status = document.getElementById('upload-status');
+  status.className = 'status-bar show';
+  status.textContent = '⏳ 上傳照片中，請稍候…';
+
+  try {
+    const rows = document.querySelectorAll('#photo-rows .photo-row');
+    const photos = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const fileInput = row.querySelector('input[type="file"]');
+      const caption   = (row.querySelector('[data-caption]').value || '').trim();
+      const existUrl  = cfg.photos[i] && cfg.photos[i].url;
+
+      let url = existUrl || '';
+
+      if (fileInput && fileInput.files[0]) {
+        status.textContent = `⏳ 上傳第 ${i + 1} / ${rows.length} 張…`;
+        url = await uploadPhoto(fileInput.files[0], i);
+      }
+
+      if (url) photos.push({ url, caption });
+    }
+
+    if (photos.length === 0) { status.className = 'status-bar show err'; status.textContent = '❌ 請至少上傳一張照片！'; return; }
+
+    await saveConfig(photos);
+    updateNameScreen();
+
+    status.className = 'status-bar show ok';
+    status.textContent = `✅ 已儲存 ${photos.length} 張照片！`;
+
+    generateQR();
+
+  } catch(e) {
+    status.className = 'status-bar show err';
+    status.textContent = '❌ 上傳失敗：' + (e.message || e);
+    console.error(e);
+  }
+}
+
+function generateQR() {
+  const url = location.origin + location.pathname;
+  const genUrl = document.getElementById('gen-url');
+  genUrl.style.display = 'block';
+  genUrl.textContent = url;
+
+  document.getElementById('qr-wrap').style.display = 'block';
+  document.getElementById('copy-wrap').style.display = 'block';
+
+  const canvas = document.getElementById('qr-canvas');
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  try {
+    new QRCode(canvas, { text: url, width: 220, height: 220, colorDark: '#26215C', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.M });
+  } catch(e) {}
+  window._gameUrl = url;
+}
+
+function copyUrl() {
+  if (!window._gameUrl) return;
+  navigator.clipboard.writeText(window._gameUrl)
+    .then(() => alert('連結已複製！'))
+    .catch(() => prompt('請手動複製：', window._gameUrl));
+}
+
+async function clearLB() {
+  if (!confirm('確定要清除所有排行榜紀錄嗎？')) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/bday_leaderboard?game_id=eq.default`, {
+      method: 'DELETE', headers
+    });
+    lb = [];
+    renderLBPreview();
+    alert('排行榜已清除！');
+  } catch(e) { alert('清除失敗：' + e.message); }
+}
+</script>
+</body>
+</html>
