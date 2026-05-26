@@ -689,7 +689,7 @@ function makeCard(p, i, isResult) {
   cap.className = 'pcap';
   cap.textContent = isResult
     ? (p.caption || ('照片 ' + (p._ci + 1)))
-    : ('📷 ' + (i + 1));
+    : (p.caption || ('📷 ' + (i + 1)));
   card.appendChild(cap);
 
   if (!isResult) attachDragHandlers(card, i);
@@ -934,11 +934,17 @@ function copyUrl() {
 async function clearLB() {
   if (!confirm('確定要清除所有排行榜紀錄嗎？')) return;
   try {
-    await fetch(`${SB_URL}/rest/v1/bday_leaderboard?game_id=eq.default`, {
-      method: 'DELETE', headers
+    const r = await fetch(`${SB_URL}/rest/v1/bday_leaderboard?game_id=eq.default`, {
+      method: 'DELETE',
+      headers: { ...headers, 'Prefer': 'return=minimal' }
     });
+    if (!r.ok) {
+      const err = await r.text();
+      throw new Error(err);
+    }
     lb = [];
     renderLBPreview();
+    renderLB('lb-main', '');
     alert('排行榜已清除！');
   } catch(e) { alert('清除失敗：' + e.message); }
 }
