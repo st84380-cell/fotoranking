@@ -367,6 +367,39 @@ input[type="file"] { display: none; }
       <button class="btn btn-gray" onclick="backToName()">換人玩 ↩</button>
       <button class="btn btn-primary" onclick="startGame()">再挑戰 🔄</button>
     </div>
+    <button class="btn btn-gray" onclick="showAnswerFromResult()" style="margin-top:8px;">🔍 查看正確答案</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     ANSWER SCREEN
+══════════════════════════════════════ -->
+<div class="screen" id="s-answer">
+  <div class="gbar" style="background: var(--purple-dark);">
+    <button onclick="history.back ? answerBack() : backToName()" style="background:none;border:none;cursor:pointer;color:#EEEDFE;font-size:20px;padding:0;line-height:1;">←</button>
+    <span class="gbar-title">🎯 正確答案</span>
+    <button onclick="enterAnswerProjection()" style="background:rgba(255,255,255,0.15);border:none;cursor:pointer;color:#EEEDFE;font-size:12px;font-weight:700;padding:5px 10px;border-radius:20px;">投影模式</button>
+  </div>
+  <div style="padding:10px 1rem 4px; font-size:12px; color:var(--muted); text-align:center; background:var(--surface); border-bottom:1px solid var(--border);">
+    所有照片的正確時間順序（最早 → 最近）
+  </div>
+  <div class="pgrid" id="answer-grid" style="background:var(--bg);"></div>
+  <div style="padding:0.75rem 1rem 1.5rem; background:var(--surface); border-top:1px solid var(--border);">
+    <button class="btn btn-gray" onclick="answerBack()">← 返回</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     PROJECTION SCREEN (管理員投影用)
+══════════════════════════════════════ -->
+<div class="screen" id="s-projection">
+  <div style="background:var(--purple-dark); padding:10px 1rem; display:flex; align-items:center; gap:10px;">
+    <button onclick="showScreen('s-answer')" style="background:none;border:none;cursor:pointer;color:#EEEDFE;font-size:20px;padding:0;line-height:1;">←</button>
+    <span style="flex:1; font-size:15px; font-weight:700; color:#EEEDFE;">🎯 正確答案（投影模式）</span>
+  </div>
+  <div style="flex:1; padding:1rem; background:var(--bg); overflow-y:auto;">
+    <div style="font-size:13px; color:var(--muted); text-align:center; margin-bottom:12px;">所有照片正確時間順序</div>
+    <div id="proj-grid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;"></div>
   </div>
 </div>
 
@@ -418,6 +451,9 @@ input[type="file"] { display: none; }
     </button>
     <button class="btn btn-danger" onclick="clearLB()" style="margin-top:10px;">
       🗑️ 重置排行榜
+    </button>
+    <button class="btn btn-gray" onclick="showAnswerAdmin()" style="margin-top:10px;">
+      🎯 公布答案畫面
     </button>
 
     <div class="gen-url" id="gen-url"></div>
@@ -621,6 +657,12 @@ async function compressImage(file, maxPx, quality) {
 /* ═══════════════════════════════════════
    SCREEN CONTROL
 ════════════════════════════════════════ */
+function showAnswerAdmin() {
+  answerFrom = 's-admin';
+  renderAnswerGrid();
+  showScreen('s-answer');
+}
+
 function enterAdmin() {
   const pw = prompt('請輸入管理員密碼：');
   if (pw === '0522') {
@@ -659,10 +701,26 @@ async function startGame() {
   // reload latest config from Supabase (non-blocking, use cached cfg if slow)
   try { await Promise.race([loadConfig(), new Promise(r => setTimeout(r, 1500))]); } catch(e) {}
 
-  const pool = cfg.photos.length > 0 ? cfg.photos : DEMOS;
-  numPhotos = pool.length;
+  const fullPool = cfg.photos.length > 0 ? cfg.photos : DEMOS;
+  // 隨機抽最多 10 張，保持原始相對順序
+  const PICK = 10;
+  let picked;
+  if (fullPool.length <= PICK) {
+    picked = [...fullPool];
+  } else {
+    // 隨機選 PICK 個 index，排序後取出
+    const indices = [];
+    const pool2 = [...Array(fullPool.length).keys()];
+    for (let i = 0; i < PICK; i++) {
+      const j = Math.floor(Math.random() * pool2.length);
+      indices.push(pool2.splice(j, 1)[0]);
+    }
+    indices.sort((a, b) => a - b);
+    picked = indices.map(i => fullPool[i]);
+  }
+  numPhotos = picked.length;
 
-  correctOrder = pool.map((p, i) => ({ ...p, _ci: i }));
+  correctOrder = picked.map((p, i) => ({ ...p, _ci: i }));
   // keep shuffling until order differs from correct order
   let attempt = 0;
   do {
@@ -908,6 +966,7 @@ function initAdmin() {
   document.getElementById('photo-rows').innerHTML = '';
   const count = Math.max(cfg.photos.length, 3);
   for (let i = 0; i < count; i++) addRow(cfg.photos[i]);
+  refreshRowNumbers();
 }
 
 function addRow(existing) {
@@ -1033,9 +1092,10 @@ function refreshRowNumbers() {
 
 function removeRow() {
   const wrap = document.getElementById('photo-rows');
-  if (rowCount <= 1) return;
+  if (wrap.querySelectorAll('.photo-row').length <= 1) return;
   wrap.removeChild(wrap.lastElementChild);
-  rowCount--;
+  // do NOT decrement rowCount — it's a unique counter, never reuse numbers
+  refreshRowNumbers();
 }
 
 async function saveAndGenerate() {
@@ -1104,6 +1164,94 @@ function copyUrl() {
   navigator.clipboard.writeText(window._gameUrl)
     .then(() => alert('連結已複製！'))
     .catch(() => prompt('請手動複製：', window._gameUrl));
+}
+
+/* ═══════════════════════════════════════
+   ANSWER & PROJECTION
+════════════════════════════════════════ */
+let answerFrom = 's-result'; // track where to go back
+
+function showAnswerFromResult() {
+  answerFrom = 's-result';
+  renderAnswerGrid();
+  showScreen('s-answer');
+}
+
+function answerBack() {
+  showScreen(answerFrom);
+}
+
+function renderAnswerGrid() {
+  // show ALL photos in correct order (full cfg.photos)
+  const pool = cfg.photos.length > 0 ? cfg.photos : DEMOS;
+  const grid = document.getElementById('answer-grid');
+  grid.innerHTML = '';
+  pool.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'pcard';
+    card.style.cursor = 'default';
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'pimg';
+    if (p.url) {
+      const img = document.createElement('img');
+      img.src = p.url; img.alt = p.caption || '';
+      imgWrap.appendChild(img);
+    } else {
+      imgWrap.textContent = p.emoji || '🖼️';
+    }
+    const seq = document.createElement('div');
+    seq.className = 'seq-badge';
+    seq.style.background = 'var(--purple)';
+    seq.textContent = i + 1;
+    imgWrap.appendChild(seq);
+
+    card.appendChild(imgWrap);
+    const cap = document.createElement('div');
+    cap.className = 'pcap';
+    cap.textContent = p.caption || ('照片 ' + (i + 1));
+    card.appendChild(cap);
+    grid.appendChild(card);
+  });
+}
+
+function enterAnswerProjection() {
+  const pw = prompt('請輸入管理員密碼：');
+  if (pw !== '0522') { if (pw !== null) alert('密碼錯誤！'); return; }
+  renderProjGrid();
+  showScreen('s-projection');
+}
+
+function renderProjGrid() {
+  const pool = cfg.photos.length > 0 ? cfg.photos : DEMOS;
+  const grid = document.getElementById('proj-grid');
+  grid.innerHTML = '';
+  pool.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:2px solid var(--purple);border-radius:12px;overflow:hidden;background:var(--surface);';
+
+    const imgWrap = document.createElement('div');
+    imgWrap.style.cssText = 'width:100%;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:var(--gray-light);position:relative;overflow:hidden;font-size:42px;';
+    if (p.url) {
+      const img = document.createElement('img');
+      img.src = p.url; img.alt = '';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      imgWrap.appendChild(img);
+    } else {
+      imgWrap.textContent = p.emoji || '🖼️';
+    }
+    const num = document.createElement('div');
+    num.style.cssText = 'position:absolute;top:5px;left:5px;background:var(--purple);color:#fff;font-size:13px;font-weight:900;padding:3px 8px;border-radius:6px;';
+    num.textContent = i + 1;
+    imgWrap.appendChild(num);
+    card.appendChild(imgWrap);
+
+    const cap = document.createElement('div');
+    cap.style.cssText = 'padding:6px 8px;font-size:12px;font-weight:700;color:var(--text);text-align:center;';
+    cap.textContent = p.caption || ('照片 ' + (i + 1));
+    card.appendChild(cap);
+    grid.appendChild(card);
+  });
 }
 
 async function clearLB() {
