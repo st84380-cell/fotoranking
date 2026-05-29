@@ -834,24 +834,40 @@ function initAdmin() {
 
 function addRow(existing) {
   rowCount++;
+  const uid = 'r' + Date.now() + '_' + rowCount;  // stable unique id
   const wrap = document.getElementById('photo-rows');
   const row = document.createElement('div');
   row.className = 'photo-row';
-  row.dataset.row = rowCount;
+  row.dataset.uid = uid;
   if (existing && existing.url) row.dataset.existingUrl = existing.url;
   row.innerHTML = `
     <div class="drag-handle" title="拖曳排序">⠿</div>
     <div class="photo-row-num">${rowCount}</div>
     <div class="photo-row-fields">
-      <label class="upload-label${existing && existing.url ? ' has-file' : ''}" for="file-${rowCount}">
+      <label class="upload-label${existing && existing.url ? ' has-file' : ''}" for="file-${uid}">
         ${existing && existing.url ? '✅ 已有照片' : '📷 點擊上傳照片'}
-        <input type="file" id="file-${rowCount}" accept="image/*" onchange="onFileChange(this, ${rowCount})" />
+        <input type="file" id="file-${uid}" accept="image/*" />
       </label>
-      ${existing && existing.url ? `<img class="photo-preview" src="${existing.url}" alt="" />` : `<img class="photo-preview hidden" id="prev-${rowCount}" alt="" />`}
+      ${existing && existing.url ? `<img class="photo-preview" src="${existing.url}" alt="" />` : `<img class="photo-preview hidden" alt="" />`}
       <input type="text" placeholder="照片說明（如：1歲生日、第一次走路）" value="${existing ? (existing.caption || '') : ''}" data-caption="true" />
     </div>
   `;
   wrap.appendChild(row);
+
+  // bind file input change directly on the element (no global id lookup)
+  row.querySelector('input[type="file"]').addEventListener('change', function() {
+    if (!this.files[0]) return;
+    const label = this.closest('.upload-label');
+    label.classList.add('has-file');
+    label.childNodes[0].textContent = '✅ ' + this.files[0].name.slice(0, 20);
+    let prev = row.querySelector('.photo-preview');
+    if (!prev) { prev = document.createElement('img'); prev.className = 'photo-preview'; label.after(prev); }
+    prev.classList.remove('hidden');
+    prev.src = URL.createObjectURL(this.files[0]);
+    // store file on row for later upload
+    row._newFile = this.files[0];
+  });
+
   attachRowDrag(row);
 }
 
@@ -935,19 +951,7 @@ function refreshRowNumbers() {
   });
 }
 
-function onFileChange(input, rowNum) {
-  if (!input.files[0]) return;
-  const label = input.closest('.upload-label');
-  const row   = input.closest('.photo-row');
-  label.classList.add('has-file');
-  label.childNodes[0].textContent = '✅ ' + input.files[0].name.slice(0, 20);
 
-  // show preview
-  let prev = row.querySelector('.photo-preview');
-  if (!prev) { prev = document.createElement('img'); prev.className = 'photo-preview'; label.after(prev); }
-  prev.classList.remove('hidden');
-  prev.src = URL.createObjectURL(input.files[0]);
-}
 
 function removeRow() {
   const wrap = document.getElementById('photo-rows');
@@ -967,15 +971,15 @@ async function saveAndGenerate() {
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const fileInput = row.querySelector('input[type="file"]');
-      const caption   = (row.querySelector('[data-caption]').value || '').trim();
+      const caption  = (row.querySelector('[data-caption]').value || '').trim();
       const existUrl = row.dataset.existingUrl || '';
-
       let url = existUrl;
 
-      if (fileInput && fileInput.files[0]) {
+      if (row._newFile) {
         status.textContent = `⏳ 上傳第 ${i + 1} / ${rows.length} 張…`;
-        url = await uploadPhoto(fileInput.files[0], i);
+        url = await uploadPhoto(row._newFile, i);
+        row.dataset.existingUrl = url;
+        row._newFile = null;
       }
 
       if (url) photos.push({ url, caption });
