@@ -317,6 +317,12 @@ input[type="file"] { display: none; }
     <button class="btn btn-primary" onclick="startGame()">開始遊戲 🎉</button>
     <button class="btn btn-gray" onclick="enterAdmin()" style="margin-top:10px;">⚙️ 管理員設定</button>
 
+    <div id="qr-name-wrap" style="display:none; margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem; text-align:center;">
+      <div class="sec-lbl">📱 掃碼加入遊戲</div>
+      <div id="qr-name-canvas-wrap" style="display:inline-block; background:#fff; border-radius:12px; padding:12px; box-shadow:0 2px 12px rgba(0,0,0,0.08); margin-bottom:8px;"></div>
+      <div style="font-size:11px; color:var(--muted); word-break:break-all; padding:0 8px;" id="qr-name-url"></div>
+    </div>
+
     <div id="lb-preview-wrap" style="display:none; margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem;">
       <div class="sec-lbl">🏆 目前排行</div>
       <div id="lb-preview"></div>
@@ -422,7 +428,19 @@ input[type="file"] { display: none; }
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* Minimal QR code generator (no external dependency) */
+/* Using Google Charts API as fallback - reliable and no library needed */
+window.makeQR = function(container, url, size) {
+  container.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=26215C&margin=1`;
+  img.width = size; img.height = size;
+  img.style.display = 'block';
+  img.style.borderRadius = '4px';
+  container.appendChild(img);
+};
+</script>
 <script>
 /* ═══════════════════════════════════════
    SUPABASE CONFIG
@@ -608,6 +626,7 @@ function updateNameScreen() {
   document.getElementById('g-title').textContent  = cfg.title;
   document.getElementById('g-sub').textContent    = cfg.subtitle;
   renderLBPreview();
+  if (cfg.photos.length > 0) generateQR();
 }
 
 function backToName() {
@@ -1004,18 +1023,20 @@ async function saveAndGenerate() {
 
 function generateQR() {
   const url = location.origin + location.pathname;
+
+  // Admin screen: show URL text + QR
   const genUrl = document.getElementById('gen-url');
   genUrl.style.display = 'block';
   genUrl.textContent = url;
-
   document.getElementById('qr-wrap').style.display = 'block';
   document.getElementById('copy-wrap').style.display = 'block';
+  makeQR(document.getElementById('qr-wrap'), url, 220);
 
-  const canvas = document.getElementById('qr-canvas');
-  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-  try {
-    new QRCode(canvas, { text: url, width: 220, height: 220, colorDark: '#26215C', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.M });
-  } catch(e) {}
+  // Name screen: show QR for projection
+  document.getElementById('qr-name-wrap').style.display = 'block';
+  document.getElementById('qr-name-url').textContent = url;
+  makeQR(document.getElementById('qr-name-canvas-wrap'), url, 200);
+
   window._gameUrl = url;
 }
 
