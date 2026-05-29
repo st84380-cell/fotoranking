@@ -859,12 +859,21 @@ function attachRowDrag(row) {
   const handle = row.querySelector('.drag-handle');
   let srcRow = null;
 
-  // Desktop drag
-  handle.addEventListener('mousedown', () => { row.draggable = true; });
-  row.addEventListener('dragstart', e => { srcRow = row; row.classList.add('dragging-row'); e.dataTransfer.effectAllowed = 'move'; });
-  row.addEventListener('dragend',   () => { row.draggable = false; row.classList.remove('dragging-row'); srcRow = null; refreshRowNumbers(); });
-  row.addEventListener('dragover',  e => { e.preventDefault(); if (srcRow && srcRow !== row) row.classList.add('dragover-row'); });
-  row.addEventListener('dragleave', () => row.classList.remove('dragover-row'));
+  // Desktop drag — make entire row draggable, but only initiate from handle
+  row.draggable = true;
+  handle.addEventListener('mousedown', e => e.stopPropagation());
+  row.addEventListener('dragstart', e => {
+    // only allow drag when pointer is over handle
+    const hr = handle.getBoundingClientRect();
+    if (e.clientX < hr.left - 10 || e.clientX > hr.right + 10) { e.preventDefault(); return; }
+    srcRow = row;
+    setTimeout(() => row.classList.add('dragging-row'), 0);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');
+  });
+  row.addEventListener('dragend', () => { row.classList.remove('dragging-row'); srcRow = null; refreshRowNumbers(); });
+  row.addEventListener('dragover', e => { e.preventDefault(); if (srcRow && srcRow !== row) row.classList.add('dragover-row'); });
+  row.addEventListener('dragleave', e => { if (!row.contains(e.relatedTarget)) row.classList.remove('dragover-row'); });
   row.addEventListener('drop', e => {
     e.preventDefault(); row.classList.remove('dragover-row');
     if (!srcRow || srcRow === row) return;
