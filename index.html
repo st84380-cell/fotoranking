@@ -857,69 +857,75 @@ function addRow(existing) {
 
 function attachRowDrag(row) {
   const handle = row.querySelector('.drag-handle');
-  let srcRow = null;
+  let startY = 0, currentY = 0, dragging = false, clone = null;
 
-  // Desktop drag — make entire row draggable, but only initiate from handle
-  row.draggable = true;
-  handle.addEventListener('mousedown', e => e.stopPropagation());
-  row.addEventListener('dragstart', e => {
-    // only allow drag when pointer is over handle
-    const hr = handle.getBoundingClientRect();
-    if (e.clientX < hr.left - 10 || e.clientX > hr.right + 10) { e.preventDefault(); return; }
-    srcRow = row;
-    setTimeout(() => row.classList.add('dragging-row'), 0);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', '');
-  });
-  row.addEventListener('dragend', () => { row.classList.remove('dragging-row'); srcRow = null; refreshRowNumbers(); });
-  row.addEventListener('dragover', e => { e.preventDefault(); if (srcRow && srcRow !== row) row.classList.add('dragover-row'); });
-  row.addEventListener('dragleave', e => { if (!row.contains(e.relatedTarget)) row.classList.remove('dragover-row'); });
-  row.addEventListener('drop', e => {
-    e.preventDefault(); row.classList.remove('dragover-row');
-    if (!srcRow || srcRow === row) return;
-    const wrap = document.getElementById('photo-rows');
-    const rows = [...wrap.querySelectorAll('.photo-row')];
-    const srcIdx = rows.indexOf(srcRow), tgtIdx = rows.indexOf(row);
-    if (srcIdx < tgtIdx) wrap.insertBefore(srcRow, row.nextSibling);
-    else wrap.insertBefore(srcRow, row);
-    refreshRowNumbers();
-  });
+  function getRows() { return [...document.querySelectorAll('#photo-rows .photo-row')]; }
 
-  // Touch drag
-  let tClone = null, tSrc = null;
-  handle.addEventListener('touchstart', e => {
-    tSrc = row;
-    const t = e.touches[0], r = row.getBoundingClientRect();
-    tClone = row.cloneNode(true);
-    tClone.style.cssText = `position:fixed;z-index:9999;opacity:.8;pointer-events:none;width:${r.width}px;left:${r.left}px;top:${r.top}px;border-radius:12px;background:white;box-shadow:0 4px 20px rgba(0,0,0,0.15);`;
-    document.body.appendChild(tClone);
+  function findTarget(y) {
+    return getRows().find(r => {
+      if (r === row) return false;
+      const rect = r.getBoundingClientRect();
+      return y >= rect.top && y <= rect.bottom;
+    });
+  }
+
+  function startDrag(y) {
+    dragging = true;
+    startY = y;
+    const rect = row.getBoundingClientRect();
+    clone = row.cloneNode(true);
+    clone.style.cssText = `position:fixed;z-index:9999;opacity:.85;pointer-events:none;width:${rect.width}px;left:${rect.left}px;top:${rect.top}px;border-radius:12px;background:white;box-shadow:0 8px 24px rgba(0,0,0,0.18);transition:none;`;
+    document.body.appendChild(clone);
     row.style.opacity = '.3';
+  }
+
+  function moveDrag(y) {
+    if (!dragging || !clone) return;
+    const dy = y - startY;
+    const rect = row.getBoundingClientRect();
+    clone.style.top = (rect.top + dy) + 'px';
+    getRows().forEach(r => r.classList.remove('dragover-row'));
+    const target = findTarget(y);
+    if (target) target.classList.add('dragover-row');
+  }
+
+  function endDrag(y) {
+    if (!dragging) return;
+    dragging = false;
+    if (clone) { clone.remove(); clone = null; }
+    row.style.opacity = '';
+    getRows().forEach(r => r.classList.remove('dragover-row'));
+    const target = findTarget(y);
+    if (target) {
+      const wrap = document.getElementById('photo-rows');
+      const rows = getRows();
+      const si = rows.indexOf(row), ti = rows.indexOf(target);
+      if (si < ti) wrap.insertBefore(row, target.nextSibling);
+      else wrap.insertBefore(row, target);
+      refreshRowNumbers();
+    }
+  }
+
+  // Mouse
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    startDrag(e.clientY);
+    const onMove = e => moveDrag(e.clientY);
+    const onUp   = e => { endDrag(e.clientY); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // Touch
+  handle.addEventListener('touchstart', e => {
+    startDrag(e.touches[0].clientY);
   }, { passive: true });
   handle.addEventListener('touchmove', e => {
     e.preventDefault();
-    const t = e.touches[0];
-    if (tClone) tClone.style.top = (t.clientY - 30) + 'px';
-    document.querySelectorAll('.photo-row').forEach(r => r.classList.remove('dragover-row'));
-    const el = document.elementFromPoint(t.clientX, t.clientY);
-    const tr = el && el.closest('.photo-row');
-    if (tr && tr !== tSrc) tr.classList.add('dragover-row');
+    moveDrag(e.touches[0].clientY);
   }, { passive: false });
   handle.addEventListener('touchend', e => {
-    if (tClone) { tClone.remove(); tClone = null; }
-    row.style.opacity = '';
-    document.querySelectorAll('.photo-row').forEach(r => r.classList.remove('dragover-row'));
-    const t = e.changedTouches[0];
-    const el = document.elementFromPoint(t.clientX, t.clientY);
-    const tr = el && el.closest('.photo-row');
-    if (tr && tr !== tSrc) {
-      const wrap = document.getElementById('photo-rows');
-      const rows = [...wrap.querySelectorAll('.photo-row')];
-      const si = rows.indexOf(tSrc), ti = rows.indexOf(tr);
-      if (si < ti) wrap.insertBefore(tSrc, tr.nextSibling);
-      else wrap.insertBefore(tSrc, tr);
-      refreshRowNumbers();
-    }
-    tSrc = null;
+    endDrag(e.changedTouches[0].clientY);
   });
 }
 
