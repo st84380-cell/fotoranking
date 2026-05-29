@@ -339,7 +339,7 @@ input[type="file"] { display: none; }
     <span class="timer-chip" id="timer">60</span>
   </div>
   <div class="prog-track"><div class="prog-fill" id="prog" style="width:100%"></div></div>
-  <div class="hint">拖曳照片，由左到右按時間排列（最早 → 最近）</div>
+  <div class="hint">長按照片後拖曳排列，由左到右（最早 → 最近）</div>
   <div class="pgrid" id="pgrid"></div>
   <div class="gfoot">
     <button class="btn btn-primary" onclick="submitAnswer()">送出答案 ✓</button>
@@ -428,6 +428,7 @@ input[type="file"] { display: none; }
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 <script>
 /* Minimal QR code generator (no external dependency) */
 /* Using Google Charts API as fallback - reliable and no library needed */
@@ -583,10 +584,23 @@ async function refreshLeaderboard() {
 /* ═══════════════════════════════════════
    IMAGE COMPRESSION
 ════════════════════════════════════════ */
-function compressImage(file, maxPx, quality) {
+async function compressImage(file, maxPx, quality) {
+  // Convert HEIC/HEIF to JPEG first if needed
+  let sourceFile = file;
+  const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
+                 file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif');
+  if (isHeic) {
+    try {
+      const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      sourceFile = Array.isArray(converted) ? converted[0] : converted;
+    } catch(e) {
+      console.warn('HEIC convert failed, trying anyway', e);
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const img = new Image();
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(sourceFile);
     img.onload = () => {
       URL.revokeObjectURL(url);
       let w = img.width, h = img.height;
@@ -736,27 +750,63 @@ function attachDragHandlers(card, i) {
     const a = [...currentOrder]; const [m] = a.splice(dragIdx, 1); a.splice(i, 0, m);
     currentOrder = a; renderGrid();
   });
-  // Touch
+  // Touch — 長按 500ms 才啟動拖曳，短觸可正常滾動
+  let longPressTimer = null;
+  let touchLocked = false;
+  let startTouchX = 0, startTouchY = 0;
+
   card.addEventListener('touchstart', e => {
-    const t = e.touches[0], r = card.getBoundingClientRect();
-    dragIdx = i;
-    const cl = card.cloneNode(true);
-    cl._ox = t.clientX - r.left; cl._oy = t.clientY - r.top;
-    cl.style.cssText = `position:fixed;z-index:9999;opacity:.85;pointer-events:none;width:${r.width}px;height:${r.height}px;left:${t.clientX - cl._ox}px;top:${t.clientY - cl._oy}px;transform:scale(1.05);border-radius:12px;`;
-    document.body.appendChild(cl); card._cl = cl; card.style.opacity = '.3';
-  }, { passive: true });
-  card.addEventListener('touchmove', e => {
-    e.preventDefault();
     const t = e.touches[0];
-    if (card._cl) { card._cl.style.left = (t.clientX - card._cl._ox) + 'px'; card._cl.style.top = (t.clientY - card._cl._oy) + 'px'; }
+    startTouchX = t.clientX; startTouchY = t.clientY;
+    touchLocked = false;
+
+    longPressTimer = setTimeout(() => {
+      touchLocked = true;
+      // 震動回饋（如裝置支援）
+      if (navigator.vibrate) navigator.vibrate(40);
+      // 啟動拖曳
+      const r = card.getBoundingClientRect();
+      dragIdx = i;
+      const cl = card.cloneNode(true);
+      cl._ox = t.clientX - r.left; cl._oy = t.clientY - r.top;
+      cl.style.cssText = `position:fixed;z-index:9999;opacity:.85;pointer-events:none;width:${r.width}px;height:${r.height}px;left:${t.clientX - cl._ox}px;top:${t.clientY - cl._oy}px;transform:scale(1.08);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.2);`;
+      document.body.appendChild(cl); card._cl = cl; card.style.opacity = '.3';
+      card.classList.add('dragging');
+    }, 500);
+  }, { passive: true });
+
+  card.addEventListener('touchmove', e => {
+    const t = e.touches[0];
+    const dx = Math.abs(t.clientX - startTouchX);
+    const dy = Math.abs(t.clientY - startTouchY);
+
+    // 如果手指移動超過 8px 且還沒進入拖曳模式，取消長按
+    if (!touchLocked && (dx > 8 || dy > 8)) {
+      clearTimeout(longPressTimer); longPressTimer = null;
+    }
+
+    if (!touchLocked) return; // 未啟動拖曳，讓頁面正常滾動
+    e.preventDefault();
+
+    if (card._cl) {
+      card._cl.style.left = (t.clientX - card._cl._ox) + 'px';
+      card._cl.style.top  = (t.clientY - card._cl._oy) + 'px';
+    }
     document.querySelectorAll('.pcard').forEach(c => c.classList.remove('dragover'));
     const el = document.elementFromPoint(t.clientX, t.clientY);
     const tc = el && el.closest('.pcard');
     if (tc && parseInt(tc.dataset.idx) !== i) tc.classList.add('dragover');
   }, { passive: false });
+
   card.addEventListener('touchend', e => {
+    clearTimeout(longPressTimer); longPressTimer = null;
+    if (!touchLocked) return;
+    touchLocked = false;
+
     if (card._cl) { card._cl.remove(); card._cl = null; }
+    card.classList.remove('dragging');
     document.querySelectorAll('.pcard').forEach(c => { c.classList.remove('dragover'); c.style.opacity = ''; });
+
     const t = e.changedTouches[0];
     const tc = document.elementFromPoint(t.clientX, t.clientY)?.closest('.pcard');
     if (tc) {
@@ -766,6 +816,15 @@ function attachDragHandlers(card, i) {
         currentOrder = a; renderGrid();
       }
     }
+    dragIdx = null;
+  });
+
+  card.addEventListener('touchcancel', () => {
+    clearTimeout(longPressTimer); longPressTimer = null;
+    touchLocked = false;
+    if (card._cl) { card._cl.remove(); card._cl = null; }
+    card.classList.remove('dragging');
+    document.querySelectorAll('.pcard').forEach(c => { c.classList.remove('dragover'); c.style.opacity = ''; });
     dragIdx = null;
   });
 }
@@ -865,7 +924,7 @@ function addRow(existing) {
     <div class="photo-row-fields">
       <label class="upload-label${existing && existing.url ? ' has-file' : ''}" for="file-${uid}">
         ${existing && existing.url ? '✅ 已有照片' : '📷 點擊上傳照片'}
-        <input type="file" id="file-${uid}" accept="image/*" />
+        <input type="file" id="file-${uid}" accept="image/*,.heic,.heif" />
       </label>
       ${existing && existing.url ? `<img class="photo-preview" src="${existing.url}" alt="" />` : `<img class="photo-preview hidden" alt="" />`}
       <input type="text" placeholder="照片說明（如：1歲生日、第一次走路）" value="${existing ? (existing.caption || '') : ''}" data-caption="true" />
